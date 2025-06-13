@@ -1,5 +1,12 @@
 # Language Model Evaluation Harness
 
+---
+
+## Fork
+I forked lm-eval-harness to include compatibility with OLMo models.
+
+---
+
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10256836.svg)](https://doi.org/10.5281/zenodo.10256836)
 
 ---
