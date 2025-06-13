@@ -1,0 +1,130 @@
+import logging
+from typing import Optional, Union, List
+from pathlib import Path
+
+import torch
+from hf_olmo import (
+    OLMoForCausalLM,
+    OLMoTokenizerFast,
+    OLMoConfig,
+)
+
+from lm_eval.models.huggingface import HFLM
+from lm_eval.api.registry import register_model
+
+eval_logger = logging.getLogger(__name__)
+
+
+@register_model("hf_olmo")
+class OLMoLM(HFLM):
+    """
+    HuggingFace-compatible wrapper for AllenAI's OLMo model using `hf_olmo`.
+    """
+
+    def _get_config(
+        self,
+        pretrained: str,
+        revision: str = "main",
+        trust_remote_code: bool = False,
+        gguf_file: Optional[str] = None,
+    ) -> None:
+        """
+        Load OLMo config.
+        """
+        self._config = OLMoConfig.from_pretrained(
+            pretrained,
+            revision=revision,
+            trust_remote_code=trust_remote_code,
+        )
+
+    def _get_backend(
+        self,
+        config,
+        backend="default",
+        trust_remote_code: Optional[bool] = False,
+    ) -> None:
+        """
+        OLMo is a causal decoder-only model.
+        """
+        self.backend = "causal"
+        self.AUTO_MODEL_CLASS = OLMoForCausalLM
+        eval_logger.info("OLMo model detected. Using causal backend.")
+
+    def _create_model(
+        self,
+        pretrained: str,
+        revision: Optional[str] = "main",
+        dtype: Optional[Union[str, torch.dtype]] = "auto",
+        trust_remote_code: Optional[bool] = False,
+        parallelize: Optional[bool] = False,
+        gpus: Optional[int] = None,
+        max_memory_per_gpu: Optional[Union[int, str]] = None,
+        max_cpu_memory: Optional[Union[int, str]] = None,
+        offload_folder: Optional[str] = "./offload",
+        peft: Optional[str] = None,
+        delta: Optional[str] = None,
+        autogptq: Optional[Union[bool, str]] = False,
+        gptqmodel: Optional[bool] = False,
+        gguf_file: Optional[str] = None,
+        quantization_config: Optional[dict] = None,
+        **kwargs,
+    ) -> None:
+        """
+        Load OLMo model.
+        """
+        model_kwargs = kwargs if kwargs else {}
+
+        model_kwargs.update(
+            self._get_accelerate_args(
+                parallelize=parallelize,
+                device_map=kwargs.get("device_map", None),
+                max_memory_per_gpu=max_memory_per_gpu,
+                max_cpu_memory=max_cpu_memory,
+                offload_folder=offload_folder,
+                gpus=gpus,
+            )
+        )
+
+        self._model = OLMoForCausalLM.from_pretrained(
+            pretrained,
+            revision=revision,
+            torch_dtype=torch.float16 if dtype == "auto" else dtype,
+            trust_remote_code=trust_remote_code,
+            **model_kwargs,
+        )
+
+        if peft or delta:
+            raise NotImplementedError("PEFT or delta weights not yet supported for OLMo.")
+
+    def _create_tokenizer(
+        self,
+        pretrained: Union[str, torch.nn.Module],
+        tokenizer: Optional[Union[str, OLMoTokenizerFast]] = None,
+        revision: Optional[str] = "main",
+        trust_remote_code: Optional[bool] = False,
+        use_fast_tokenizer: Optional[bool] = True,
+        gguf_file: Optional[str] = None,
+        add_bos_token: Optional[bool] = False,
+    ) -> None:
+        """
+        Load OLMo tokenizer.
+        """
+        if tokenizer:
+            if isinstance(tokenizer, str):
+                self.tokenizer = OLMoTokenizerFast.from_pretrained(
+                    tokenizer,
+                    revision=revision,
+                    trust_remote_code=trust_remote_code,
+                )
+            else:
+                self.tokenizer = tokenizer
+        else:
+            model_name = pretrained if isinstance(pretrained, str) else self.model.name_or_path
+            self.tokenizer = OLMoTokenizerFast.from_pretrained(
+                model_name,
+                revision=revision,
+                trust_remote_code=trust_remote_code,
+            )
+
+        if add_bos_token:
+            self.tokenizer.add_bos_token = True
