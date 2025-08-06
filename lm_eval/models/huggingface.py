@@ -914,12 +914,13 @@ class HFLM(TemplateLM):
         stopping_criteria = stop_sequences_criteria(
             self.tokenizer, stop, context.shape[1], context.shape[0]
         )
+        use_cache = generation_kwargs.pop("use_cache", True)
         return self.model.generate(
             input_ids=context,
             max_length=max_length,
             stopping_criteria=stopping_criteria,
             pad_token_id=self.tokenizer.pad_token_id,
-            use_cache=True,
+            use_cache=use_cache,
             **generation_kwargs,
         )
 
